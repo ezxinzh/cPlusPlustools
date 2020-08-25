@@ -25,18 +25,23 @@ char * int2ipstr(unsigned int ip_int)
 
     return ipstr;
 }
- 
+
+/**
+ * 功能说明：可以将ip地址的点分表示转换成整形值或者相反的转换
+ * 编译说明：gcc -o ipstr2int ipstr2int.c -lm
+ * 使用说明：./ipstr2int 
+ * **/
 int main(int argc, char *argv[])
 {
-	const char *ip = "192.168.186.15";
-	char *ipstr = NULL;
-	unsigned int ip_add = 0;
+    const char *ip = "192.168.186.15";
+    char *ipstr = NULL;
+    unsigned int ip_add = 0;
 
     ip_add = ipstr2int(ip);	
-	printf("%u\n",ip_add);
+    printf("%u\n",ip_add);
 
     ipstr = int2ipstr(ip_add);
-	printf("%s\n",ipstr);
+    printf("%s\n",ipstr);
 
-	return 0;
+    return 0;
 }

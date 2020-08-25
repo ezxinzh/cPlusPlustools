@@ -208,7 +208,11 @@ unsigned int ipstr2int(const char *ip)
     return in_addr1.s_addr;
 }
 
-/* usage: ./send_arp eth0 */
+/**
+ * 功能说明：可以自己组建指定的ARP请求或应答报文，并选择相应的接口发送出去，并且等待接收相应的应答报文，然后进程退出
+ * 编译说明：gcc -o send_arp send_arp.c -lpthread，注意需要链接pthread标准库
+ * 使用说明：./send_arp eth0 192.168.186.15
+ * **/
 int main(int argc, char **argv)
 {
     int i;

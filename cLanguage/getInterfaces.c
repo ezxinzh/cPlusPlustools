@@ -23,7 +23,12 @@ typedef struct interface{
  
 int interface_num=0;                    //接口数量
 INTERFACE net_interface[MAXINTERFACES]; //接口数据
- 
+
+/**
+ * 功能说明：可以在linux系统下，获取接口相关的一些信息，作为平时测试使用的小工具
+ * 编译说明：gcc -o getInterfaces getInterfaces.c
+ * 使用说明：./getInterfaces
+ * **/
 int main(int argc,char *argv[])
 {
     struct ifreq buf[MAXINTERFACES];    // ifreq结构数组 
