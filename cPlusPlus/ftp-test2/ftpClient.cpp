@@ -1,4 +1,4 @@
-#include "ftpClient.h"
+#include "system_upgrade_ftpClient.h"
  
 static int SplitString( std::string strSrc, std::list<std::string> &strArray , std::string strFlag)
 {
@@ -15,10 +15,21 @@ static int SplitString( std::string strSrc, std::list<std::string> &strArray , s
 	return 0; 
 }
  
-CFTPManager::CFTPManager(void): m_bLogin(false)
+CFTPManager::CFTPManager(string localPath, string deviceName): 
+    m_bLogin(false)
 {
 	m_cmdSocket = socket(AF_INET, SOCK_STREAM, 0);
-	
+    if(!localPath.empty())
+    {
+        m_localPath = localPath;
+    }
+
+    if(!deviceName.empty())
+    {
+        m_deviceName = deviceName;
+    }
+
+    bindToDevice(m_cmdSocket);
 }
  
 CFTPManager::~CFTPManager(void)
@@ -48,7 +59,7 @@ FTP_API CFTPManager::login2Server(const std::string &serverIP)
 	m_strServerIP = serverIP.substr(0, pos);
 	m_nServerPort = atol(strPort.c_str());
  
-	PRINT_DEBUG("IP: %s port: %d\n", m_strServerIP.c_str(), m_nServerPort);
+	LOGG_DEBUG("IP: %s port: %d\n", m_strServerIP.c_str(), m_nServerPort);
  
 	if (Connect(m_cmdSocket, m_strServerIP, m_nServerPort) < 0)
 	{
@@ -57,7 +68,7 @@ FTP_API CFTPManager::login2Server(const std::string &serverIP)
 	}
 	
 	m_strResponse = serverResponse(m_cmdSocket);
-	PRINT_DEBUG("@@@@Response: %s", m_strResponse.c_str());
+	LOGG_DEBUG("@@@@Response: %s", m_strResponse.c_str());
  
 	return	parseResponse(m_strResponse);
 }
@@ -74,7 +85,7 @@ FTP_API CFTPManager::inputUserName(const std::string &userName)
 	}
  
 	m_strResponse = serverResponse(m_cmdSocket);
-	PRINT_DEBUG("Response: %s\n", m_strResponse.c_str());
+	LOGG_DEBUG("Response: %s\n", m_strResponse.c_str());
  
 	return parseResponse(m_strResponse);
 }
@@ -93,7 +104,7 @@ FTP_API CFTPManager::inputPassWord(const std::string &password)
 		m_bLogin = true;
  
 		m_strResponse = serverResponse(m_cmdSocket);
-		PRINT_DEBUG("Response: %s\n", m_strResponse.c_str());
+		LOGG_DEBUG("Response: %s\n", m_strResponse.c_str());
  
 		return parseResponse(m_strResponse);
 	}
@@ -109,7 +120,7 @@ FTP_API CFTPManager::quitServer(void)
 	else
 	{
 		m_strResponse = serverResponse(m_cmdSocket);
-		PRINT_DEBUG("Response: %s\n", m_strResponse.c_str());
+		LOGG_DEBUG("Response: %s\n", m_strResponse.c_str());
  
 		return parseResponse(m_strResponse);
 	}
@@ -149,12 +160,12 @@ FTP_API CFTPManager::setTransferMode(type mode)
  
 	if (Send(m_cmdSocket, strCmdLine.c_str()) < 0)
 	{
-		assert(false);
+		return -1;
 	}
 	else
 	{	
 		m_strResponse  = serverResponse(m_cmdSocket);
-		PRINT_DEBUG("@@@@Response: %s", m_strResponse.c_str());
+		LOGG_DEBUG("@@@@Response: %s", m_strResponse.c_str());
  
 		return parseResponse(m_strResponse);
 	}
@@ -181,26 +192,27 @@ const std::string CFTPManager::Pasv()
 const std::string CFTPManager::Dir(const std::string &path)
 {
 	int dataSocket = socket(AF_INET, SOCK_STREAM, 0);
+    bindToDevice(dataSocket);
  
 	if (createDataLink(dataSocket) < 0)
 	{
 		return "";
 	}
-	// 数据连接成功
+
 	std::string strCmdLine = parseCommand(FTP_COMMAND_DIR, path);
  
 	if (Send(m_cmdSocket, strCmdLine) < 0)
 	{
-		PRINT_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
+		LOGG_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
 		close(dataSocket);
 		return "";
 	}
 	else
 	{
-		PRINT_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
+		LOGG_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
 		m_strResponse = serverResponse(dataSocket);
  
-		PRINT_DEBUG("@@@@Response: \n%s\n", m_strResponse.c_str());
+		LOGG_DEBUG("@@@@Response: \n%s\n", m_strResponse.c_str());
 		close(dataSocket);
  
 		return m_strResponse;
@@ -211,7 +223,7 @@ const std::string CFTPManager::Dir(const std::string &path)
  
 FTP_API CFTPManager::CD(const std::string &path)
 {
-	assert(m_cmdSocket != INVALID_SOCKET);
+	if(m_cmdSocket == INVALID_SOCKET) return -1;
  
 	std::string strCmdLine = parseCommand(FTP_COMMAND_CHANGE_DIRECTORY, path);
  
@@ -222,13 +234,13 @@ FTP_API CFTPManager::CD(const std::string &path)
 		
 	m_strResponse = serverResponse(m_cmdSocket);
 	
-	PRINT_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
+	LOGG_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
 	return parseResponse(m_strResponse);
 }
  
 FTP_API CFTPManager::DeleteFile(const std::string &strRemoteFile)
 {
-	assert(m_cmdSocket != INVALID_SOCKET);
+	if(m_cmdSocket == INVALID_SOCKET) return -1;
  
 	std::string strCmdLine = parseCommand(FTP_COMMAND_DELETE_FILE, strRemoteFile);
  
@@ -238,13 +250,13 @@ FTP_API CFTPManager::DeleteFile(const std::string &strRemoteFile)
 	}
  
 	m_strResponse = serverResponse(m_cmdSocket);
-	PRINT_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
+	LOGG_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
 	return parseResponse(m_strResponse);
 }
  
 FTP_API CFTPManager::DeleteDirectory(const std::string &strRemoteDir)
 {
-	assert(m_cmdSocket != INVALID_SOCKET);
+	if(m_cmdSocket == INVALID_SOCKET) return -1;
  
 	std::string strCmdLine = parseCommand(FTP_COMMAND_DELETE_DIRECTORY, strRemoteDir);
  
@@ -255,13 +267,13 @@ FTP_API CFTPManager::DeleteDirectory(const std::string &strRemoteDir)
 	
 	m_strResponse = serverResponse(m_cmdSocket);
  
-	PRINT_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
+	LOGG_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
 	return parseResponse(m_strResponse);
 }
  
 FTP_API CFTPManager::CreateDirectory(const std::string &strRemoteDir)
 {
-	assert(m_cmdSocket != INVALID_SOCKET);
+	if(m_cmdSocket == INVALID_SOCKET) return -1;
  
 	std::string strCmdLine = parseCommand(FTP_COMMAND_CREATE_DIRECTORY, strRemoteDir);
  
@@ -272,28 +284,28 @@ FTP_API CFTPManager::CreateDirectory(const std::string &strRemoteDir)
 	
 	m_strResponse = serverResponse(m_cmdSocket);
  
-	PRINT_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
+	LOGG_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
 	return parseResponse(m_strResponse);
 }
  
 FTP_API CFTPManager::Rename(const std::string &strRemoteFile, const std::string &strNewFile)
 {
-	assert(m_cmdSocket != INVALID_SOCKET);
+	if(m_cmdSocket == INVALID_SOCKET) return -1;
  
 	std::string strCmdLine = parseCommand(FTP_COMMAND_RENAME_BEGIN, strRemoteFile);
 	Send(m_cmdSocket, strCmdLine);
-	PRINT_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
+	LOGG_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
  
 	Send(m_cmdSocket, parseCommand(FTP_COMMAND_RENAME_END, strNewFile));
  
 	m_strResponse = serverResponse(m_cmdSocket);
-	PRINT_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
+	LOGG_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
 	return parseResponse(m_strResponse);
 }
  
 long CFTPManager::getFileLength(const std::string &strRemoteFile)
 {
-	assert(m_cmdSocket != INVALID_SOCKET);
+	if(m_cmdSocket == INVALID_SOCKET) return -1;
  
 	std::string strCmdLine = parseCommand(FTP_COMMAND_FILE_SIZE, strRemoteFile);
  
@@ -304,7 +316,7 @@ long CFTPManager::getFileLength(const std::string &strRemoteFile)
  
 	m_strResponse = serverResponse(m_cmdSocket);
  
-	PRINT_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
+	LOGG_DEBUG("@@@@Response: %s\n", m_strResponse.c_str());
  
 	std::string strData = m_strResponse.substr(0, 3);
 	unsigned long val = atol(strData.c_str());
@@ -312,7 +324,7 @@ long CFTPManager::getFileLength(const std::string &strRemoteFile)
 	if (val == 213)
 	{
 		strData = m_strResponse.substr(4);
-		PRINT_DEBUG("strData: %s\n", strData.c_str());
+		LOGG_DEBUG("strData: %s\n", strData.c_str());
 		val = atol(strData.c_str());
  
 		return val;
@@ -342,16 +354,13 @@ FTP_API CFTPManager::Put(const std::string &strRemoteFile, const std::string &st
 	char strBuf[dataLen] = {0};
 	unsigned long nSize = getFileLength(strRemoteFile);
 	unsigned long nLen = 0;
-// 	struct stat sBuf;
-// 
-// 	assert(stat(strLocalFile.c_str(), &sBuf) == 0);
-// 	trace("size: %d\n", sBuf.st_size);
  
-	FILE *pFile = fopen(strLocalFile.c_str(), "rb");  // 以只读方式打开  且文件必须存在
-	assert(pFile != NULL);
+	FILE *pFile = fopen(strLocalFile.c_str(), "rb"); 
+	if(pFile == NULL) return -1;
  
 	int data_fd = socket(AF_INET, SOCK_STREAM, 0);
-	assert(data_fd != -1);
+	if(data_fd == -1) return -1;
+    bindToDevice(data_fd);
  
 	if (createDataLink(data_fd) < 0)
 	{
@@ -373,9 +382,9 @@ FTP_API CFTPManager::Put(const std::string &strRemoteFile, const std::string &st
 		return -1;
 	}
  
-	PRINT_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
- 
+	LOGG_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
 	fseek(pFile, nSize, SEEK_SET);
+
 	while (!feof(pFile))
 	{
 		nLen = fread(strBuf, 1, dataLen, pFile);
@@ -391,10 +400,10 @@ FTP_API CFTPManager::Put(const std::string &strRemoteFile, const std::string &st
 		}
 	}
  
-	PRINT_DEBUG("@@@@Response: %s\n", serverResponse(data_fd).c_str());
+	LOGG_DEBUG("@@@@Response: %s\n", serverResponse(data_fd).c_str());
  
 	Close(data_fd);
-	PRINT_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
+	LOGG_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
 	fclose(pFile);
  
 	return 0;
@@ -476,7 +485,7 @@ const std::string CFTPManager::parseCommand(const unsigned int command, const st
 	strCommandLine += "\r\n";
  
 	m_commandStr = strCommandLine;
-	PRINT_DEBUG("parseCommand: %s\n", m_commandStr.c_str());
+	LOGG_DEBUG("parseCommand: %s\n", m_commandStr.c_str());
  
 	return m_commandStr;
 }
@@ -496,7 +505,7 @@ FTP_API CFTPManager::Connect(int socketfd, const std::string &serverIP, unsigned
 	timeval stime;
 	fd_set  set;
  
-	ioctl(socketfd, FIONBIO, &argp);  //设置为非阻塞模式
+	ioctl(socketfd, FIONBIO, &argp);  
  
 	memset(&addr, 0, sizeof(struct sockaddr_in));
 	addr.sin_family = AF_INET;
@@ -504,16 +513,16 @@ FTP_API CFTPManager::Connect(int socketfd, const std::string &serverIP, unsigned
 	addr.sin_addr.s_addr = inet_addr(serverIP.c_str());
 	bzero(&(addr.sin_zero), 8);
  
-	PRINT_DEBUG("Address: %s %d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+	LOGG_DEBUG("Address: %s %d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 	
-	if (connect(socketfd, (struct sockaddr*)&addr, sizeof(struct sockaddr)) == -1)   //若直接返回 则说明正在进行TCP三次握手
+	if (connect(socketfd, (struct sockaddr*)&addr, sizeof(struct sockaddr)) == -1)   
 	{
-		stime.tv_sec = 20;  //设置为1秒超时
+		stime.tv_sec = 20;  
 		stime.tv_usec = 0;
 		FD_ZERO(&set);
 		FD_SET(socketfd, &set);
  
-		if (select(socketfd + 1, NULL, &set, NULL, &stime) > 0)   ///在这边等待 阻塞 返回可以读的描述符 或者超时返回0  或者出错返回-1
+		if (select(socketfd + 1, NULL, &set, NULL, &stime) > 0)   
 		{
 			getsockopt(socketfd, SOL_SOCKET, SO_ERROR, &error, (socklen_t*)&len);
 			if (error == 0)
@@ -527,7 +536,7 @@ FTP_API CFTPManager::Connect(int socketfd, const std::string &serverIP, unsigned
 		}
 	}
 	else
-	{	PRINT_DEBUG("Connect Immediately!!!\n");
+	{	LOGG_DEBUG("Connect Immediately!!!\n");
 		ret = true;
 	}
  
@@ -537,11 +546,9 @@ FTP_API CFTPManager::Connect(int socketfd, const std::string &serverIP, unsigned
 	if (!ret)
 	{
 		close(socketfd);
-		fprintf(stderr, "cannot connect server!!\n");
+		LOGG_ERR("cannot connect server!!\n");
 		return -1;
 	}
- 
-	//fprintf(stdout, "Connect!!!\n");
  
 	return 0;
 }
@@ -570,7 +577,7 @@ const std::string CFTPManager::serverResponse(int sockfd)
  
 FTP_API CFTPManager::getData(int fd, char *strBuf, unsigned long length)
 {
-	assert(strBuf != NULL);
+	if(strBuf == NULL) return -1;
  
 	if (fd == INVALID_SOCKET)
 	{
@@ -614,9 +621,9 @@ FTP_API CFTPManager::Send(int fd, const std::string &cmd)
  
 FTP_API CFTPManager::Send(int fd, const char *cmd, const size_t len)
 {
-	if((FTP_COMMAND_USERNAME != m_nCurrentCommand) 
-		&&(FTP_COMMAND_PASSWORD != m_nCurrentCommand)
-		&&(!m_bLogin))
+    if((FTP_COMMAND_USERNAME != m_nCurrentCommand)
+        &&(FTP_COMMAND_PASSWORD != m_nCurrentCommand)
+        &&(!m_bLogin))
 	{
 		return -1;
 	}
@@ -651,7 +658,7 @@ FTP_API CFTPManager::Send(int fd, const char *cmd, const size_t len)
  
 FTP_API CFTPManager::createDataLink(int data_fd)
 {
-	assert(data_fd != INVALID_SOCKET);
+	if(data_fd == INVALID_SOCKET) return -1;
  
 	std::string strData;
 	unsigned long nPort = 0 ;
@@ -719,53 +726,58 @@ FILE *CFTPManager::createLocalFile(const std::string &strLocalFile)
 	return fopen(strLocalFile.c_str(), "w+b");
 }
  
-FTP_API CFTPManager::downLoad(const std::string &strRemoteFile, const std::string &strLocalFile, const int pos, const unsigned int length)
+FTP_API CFTPManager::downLoad(const std::string &strRemoteFile, const std::string &strLocalFile, 
+    const int pos, const unsigned int length)
 {
-	assert(length >= 0);
+    int ret = -1;
+	if(length < 0) return -1;
 
     memset(&m_progress, 0, sizeof(progress_t));
     m_progress.total_size = getFileLength(strRemoteFile);
-    PRINT_DEBUG("============= total_size: '%d' of file: '%s'", m_progress.total_size, strRemoteFile.c_str());
+//    LOGG_INFO("============= total_size: '%d' of file: '%s'", m_progress.total_size, strRemoteFile.c_str());
  
 	FILE *file = NULL;
 	unsigned long nDataLen = FTP_DEFAULT_BUFFER;
 	char strPos[MAX_PATH]  = {0};
 	int data_fd = socket(AF_INET, SOCK_STREAM, 0);
+    bindToDevice(data_fd);
 	
-	assert(data_fd != -1);
+	if(data_fd == -1) return -1;
  
 	if ((length != 0) && (length < nDataLen))
 	{
 		nDataLen = length;
 	}
 	char *dataBuf = new char[nDataLen];
-	assert(dataBuf != NULL);
+	if(dataBuf == NULL) return -1;
  
 	sprintf(strPos, "%d", pos);
  
 	if (createDataLink(data_fd) < 0)
 	{
-		PRINT_DEBUG("@@@@ Create Data Link error!!!\n");
+	    LOGG_ERR("Create Data Link error!!!\n");
 		return -1;
 	}
  
 	std::string strCmdLine = parseCommand(FTP_COMMAND_DOWNLOAD_POS, strPos);
 	if (Send(m_cmdSocket, strCmdLine) < 0)
 	{
+	    LOGG_ERR("unknown error!");
 		return -1;
 	}
-	PRINT_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
+	LOGG_DEBUG("Response: %s\n", serverResponse(m_cmdSocket).c_str());
  
 	strCmdLine = parseCommand(FTP_COMMAND_DOWNLOAD_FILE, strRemoteFile);
  
 	if (Send(m_cmdSocket, strCmdLine) < 0)
 	{
+	    LOGG_ERR("unknown error!");
 		return -1;
 	}
-	PRINT_DEBUG("@@@@Response: %s\n", serverResponse(m_cmdSocket).c_str());
+	LOGG_DEBUG("Response: %s\n", serverResponse(m_cmdSocket).c_str());
  
-	file = createLocalFile(std::string(FTP_DEFAULT_PATH + strLocalFile));
-	assert(file != NULL);
+	file = createLocalFile(std::string(m_localPath + strLocalFile));
+	if(file == NULL) return -1;
 	
 	int len = 0;
 	int nReceiveLen = 0;
@@ -788,17 +800,18 @@ FTP_API CFTPManager::downLoad(const std::string &strRemoteFile, const std::strin
         downloadProgress(len);
 	}
 
-    printf("\ndownload '%s' successfully.\n", strRemoteFile.c_str());
+	if(nReceiveLen > 1) ret = 0;
+
 	Close(data_fd);
 	fclose(file);
 	delete []dataBuf;
  
-	return 0;
+	return ret;
 }
  
 FTP_API CFTPManager::parseResponse(const std::string &str)
 {
-	assert(!str.empty());
+	if(str.empty()) return -1;
  
 	std::string strData = str.substr(0, 3);
 	unsigned int val = atoi(strData.c_str());
@@ -824,7 +837,7 @@ int CFTPManager::downloadProgress(int datasize)
  * func: split a string with specified char
  * return: vector
  * *****************************************************************************/
-vector<string> split(const char *s, const char *delim)
+static vector<string> split(const char *s, const char *delim)
 {
     vector<string> result;
     if (s && strlen(s))
@@ -853,4 +866,26 @@ string getModule(string filename)
     file = fileSplit.front();
 
     return file;
+}
+
+bool CFTPManager::bindToDevice(int &socket_fd)
+{
+    int rc = -1;
+
+    //bind device for ftp
+    if(!m_deviceName.empty())
+    {
+        rc = setsockopt(socket_fd, SOL_SOCKET, SO_BINDTODEVICE, m_deviceName.c_str(), m_deviceName.length());
+        if (rc < 0) 
+        {
+            LOGG_ERR("bind to %s failed, errno=%d %s\n", m_deviceName.c_str(), errno, strerror(errno));
+            return false;
+        }
+        else
+        {
+            LOGG_DEBUG("bind to %s success\n", m_deviceName.c_str());
+        }
+    }
+
+    return true;
 }
