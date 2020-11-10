@@ -1,4 +1,4 @@
-#include "system_upgrade_ftpClient.h"
+#include "ftpClient.h"
  
 static int SplitString( std::string strSrc, std::list<std::string> &strArray , std::string strFlag)
 {

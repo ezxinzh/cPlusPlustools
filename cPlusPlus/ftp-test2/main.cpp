@@ -1,4 +1,4 @@
-#include "system_upgrade_ftpClient.h"
+#include "ftpClient.h"
 
 /** 
  * 编译使用：g++ *.cpp -g -o ftp-test
